@@ -19,7 +19,6 @@
     input, textarea, select { font-size: 16px; } 
     .no-select { user-select: none; -webkit-user-select: none; }
     .suggestions-list { max-height: 200px; overflow-y: auto; position: absolute; z-index: 50; width: 100%; background: white; border: 1px solid #e2e8f0; border-radius: 0 0 0.5rem 0.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-    /* Hide scrollbar for clean UI */
     ::-webkit-scrollbar { width: 0px; background: transparent; }
   </style>
 </head>
@@ -31,24 +30,54 @@
   <script type="text/babel" data-type="module">
     import React, { useState, useEffect, useRef, useMemo, createContext, useContext } from 'https://esm.sh/react@18.2.0';
     import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
-    import { Plus, Trash2, Save, ArrowLeft, FileText, Check, AlertTriangle, PenTool, X, ChevronDown, ChevronUp, Share, Printer, CheckCircle, Download, Eye, Clock, MessageCircle, MapPin, Copy, Camera, Image as ImageIcon, Moon, Sun, Home, LayoutDashboard } from 'https://esm.sh/lucide-react@0.263.1';
+    import { Plus, Trash2, Save, ArrowLeft, FileText, Check, AlertTriangle, PenTool, X, ChevronDown, ChevronUp, Share, Printer, CheckCircle, Download, Eye, Clock, MessageCircle, MapPin, Copy, Camera, Image as ImageIcon, Moon, Sun, Home, LayoutDashboard, Link as LinkIcon } from 'https://esm.sh/lucide-react@0.263.1';
 
     /* --- 1. SERVICES --- */
     const generateUUID = () => Math.random().toString(36).substring(2) + Date.now().toString(36);
 
+    // Fonction de compression d'image pour éviter le crash localStorage
+    const compressImage = (file, maxWidth = 800, quality = 0.7) => {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (event) => {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = () => {
+                    const elem = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    if (width > maxWidth) {
+                        height *= maxWidth / width;
+                        width = maxWidth;
+                    }
+                    elem.width = width;
+                    elem.height = height;
+                    const ctx = elem.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    resolve(elem.toDataURL('image/jpeg', quality));
+                };
+            };
+        });
+    };
+
     const ValidationService = {
-      isMeasureSuspicious: (v) => v !== undefined && v > 0 && v < 100,
+      isMeasureSuspicious: (v, isMonobloc) => {
+          // Si c'est un coffre monobloc, on accepte les petites valeurs (ex: 180mm)
+          if (isMonobloc) return false;
+          return v !== undefined && v > 0 && v < 100;
+      },
       hasAdvancedOptions: (t) => ['FENETRE', 'VOLET_ROULANT', 'PORTE_ENTREE'].includes(t),
       validateProduct: (p) => {
         const err = [];
-        // Base
         if (p.type !== 'AUTRE') { 
           if (!p.largeurMm) err.push("largeurMm"); 
-          if (!p.hauteurMm) err.push("hauteurMm"); 
+          // Pour un volet monobloc, on vérifie la hauteur de coffre au lieu de hauteur totale si besoin, mais restons simple
+          if (!p.hauteurMm && !p.monobloc) err.push("hauteurMm"); 
         } else { 
           if (!p.description) err.push("description"); 
         }
-        // Menuiserie
+        
         if (['FENETRE', 'BAIE_COULISSANTE', 'PORTE_ENTREE', 'PORTE_SERVICE'].includes(p.type)) {
           if (!p.matiere) err.push("matiere"); 
           if (!p.profil) err.push("profil"); 
@@ -56,21 +85,20 @@
           if (p.couleur === 'AUTRE' && !p.couleurAutre) err.push("couleurAutre"); 
           if (p.profil === 'ISO' && !p.isoMm) err.push("isoMm");
           
-          // Vitrage OBLIGATOIRE pour Fenêtre/Baie
           if (['FENETRE', 'BAIE_COULISSANTE'].includes(p.type)) {
              const v = p.vitrageFlags || {};
              if (!v.standard && !v.g200 && !v.feuillete1f && !v.feuillete2f && !v.autre) err.push("vitrageFlags");
           }
-
           if (p.type === 'PORTE_ENTREE') { 
             if (!p.remplissage) err.push("remplissage"); 
             if (p.tierce && !p.cotePassageMm) err.push("cotePassageMm"); 
           }
         }
-        // Volet
+        
         if (p.type === 'VOLET_ROULANT') {
           if (!p.manoeuvre) err.push("manoeuvre"); 
-          if ((p.manoeuvre === 'FILAIRE' || p.manoeuvre === 'RADIO') && !p.sortieCable) err.push("sortieCable");
+          if ((p.manoeuvre === 'FILAIRE' || p.manoeuvre === 'RADIO') && !p.sortieCable && p.manoeuvre !== 'SOLAIRE') err.push("sortieCable");
+          if (p.monobloc && !p.coffreADeduireMm) err.push("coffreADeduireMm");
         }
         return { isValid: err.length === 0, errors: err };
       }
@@ -86,15 +114,21 @@
     const generateReportHTML = (c, products, date) => {
       const styles = `body{font-family:'Helvetica',sans-serif;max-width:900px;margin:0 auto;padding:20px;color:#1e293b;background:#fff}h1{color:#2563EB;border-bottom:2px solid #2563EB;padding-bottom:10px;font-size:24px}.header-table{width:100%;border-collapse:collapse;margin-bottom:20px;background:#f8fafc;border:1px solid #e2e8f0}.header-table td{padding:12px;vertical-align:top;width:50%}.header-label{font-weight:bold;color:#64748b;font-size:0.9em;text-transform:uppercase}.header-value{font-size:1.1em;color:#0f172a;margin-bottom:8px}.stats-bar{display:flex;gap:15px;margin-bottom:30px}.stat-item{flex:1;background:#eff6ff;padding:10px;border:1px solid #dbeafe;border-radius:6px;text-align:center}.product-block{border:2px solid #cbd5e1;margin-bottom:25px;page-break-inside:avoid;border-radius:8px;overflow:hidden}.product-header{background:#f1f5f9;padding:10px 15px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #cbd5e1;font-weight:bold;font-size:1.1em}.grid-layout{display:grid;grid-template-columns:2fr 1fr;gap:0}.specs-col{padding:15px;border-right:1px solid #e2e8f0}.visual-col{padding:15px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:#fcfcfc;gap:10px}.tech-table{width:100%;border-collapse:collapse;font-size:0.95em}.tech-table td{padding:4px 0;vertical-align:top}.tech-label{width:160px;color:#64748b;font-weight:600}.tech-val{color:#0f172a;font-weight:500}.tech-val.alert{color:#d97706}.drawing-box{border:1px dashed #cbd5e1;width:100%;height:180px;display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:10px}.photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;width:100%}.photo-thumb{width:100%;height:80px;object-fit:cover;border-radius:4px;border:1px solid #ddd}.final-stamp{text-align:right;font-size:0.8em;color:#94a3b8;margin-top:50px;border-top:1px solid #eee;padding-top:10px}@media print{.no-print{display:none}button{display:none}body{padding:0}}`;
       
-      let h = `<html><head><meta charset="utf-8"><title>Relevé ${c.client}</title><style>${styles}</style></head><body><div class="no-print" style="margin-bottom:20px;text-align:right;"><button onclick="window.print()" style="background:#2563EB;color:white;padding:10px 20px;border:none;border-radius:6px;cursor:pointer;">Imprimer / PDF</button></div><h1>SARANGE - Fiche métrage</h1><table class="header-table"><tr><td><div class="header-label">Client</div><div class="header-value">${c.client}</div><div class="header-label">Adresse</div><div class="header-value">${c.adresse}</div><div class="header-label">Contacts</div><div class="header-value">Tél: ${c.telephone} ${c.email?`<br>Email: ${c.email}`:''}</div></td><td><div class="header-label">Contrat</div><div class="header-value" style="color:${c.typeContrat==='FOURNITURE_ET_POSE'?'#16a34a':'#2563EB'}">${c.typeContrat==='FOURNITURE_ET_POSE'?'✅ FOURNITURE ET POSE':'📦 FOURNITURE SEULE'}</div><div class="header-label">Date Relevé</div><div class="header-value">${new Date(c.date).toLocaleDateString()}</div></td></tr></table><div class="stats-bar"><div class="stat-item"><strong>${products.reduce((a,b)=>a+(b.quantity||1),0)}</strong> Produits</div><div class="stat-item"><strong>${products.filter(p=>!!p.dessin?.lines.length).length}</strong> Dessins</div><div class="stat-item" style="color:#d97706"><strong>${products.filter(p=>p.largeurMm<100).length}</strong> Cotes Suspectes</div></div><h3>Détails Techniques (Atelier)</h3>`;
+      let h = `<html><head><meta charset="utf-8"><title>Relevé ${c.client}</title><style>${styles}</style></head><body><div class="no-print" style="margin-bottom:20px;text-align:right;"><button onclick="window.print()" style="background:#2563EB;color:white;padding:10px 20px;border:none;border-radius:6px;cursor:pointer;">Imprimer / PDF</button></div><h1>SARANGE - Fiche métrage</h1><table class="header-table"><tr><td><div class="header-label">Client</div><div class="header-value">${c.client}</div><div class="header-label">Adresse</div><div class="header-value">${c.adresse}</div><div class="header-label">Contacts</div><div class="header-value">Tél: ${c.telephone} ${c.email?`<br>Email: ${c.email}`:''}</div></td><td><div class="header-label">Contrat</div><div class="header-value" style="color:${c.typeContrat==='FOURNITURE_ET_POSE'?'#16a34a':'#2563EB'}">${c.typeContrat==='FOURNITURE_ET_POSE'?'✅ FOURNITURE ET POSE':'📦 FOURNITURE SEULE'}</div><div class="header-label">Date Relevé</div><div class="header-value">${new Date(c.date).toLocaleDateString()}</div></td></tr></table><div class="stats-bar"><div class="stat-item"><strong>${products.reduce((a,b)=>a+(b.quantity||1),0)}</strong> Produits</div><div class="stat-item"><strong>${products.filter(p=>!!p.dessin?.lines.length).length}</strong> Dessins</div><div class="stat-item" style="color:#d97706"><strong>${products.filter(p=>p.largeurMm<100 && !p.monobloc).length}</strong> Cotes Suspectes</div></div><h3>Détails Techniques (Atelier)</h3>`;
 
       products.forEach(p => {
         let r = '';
         const add = (l, v) => { if(v!==undefined&&v!==null&&v!==false) r+=`<tr><td class="tech-label">${l}</td><td class="tech-val">${v===true?'OUI':v}</td></tr>`; };
         if(p.room) add('Localisation', `<strong>${p.room}</strong>`);
         add('Quantité', `<strong>x ${p.quantity||1}</strong>`);
-        add('Dimensions', `<strong>L ${p.largeurMm} x H ${p.hauteurMm} mm</strong>`);
-        if(ValidationService.isMeasureSuspicious(p.largeurMm)||ValidationService.isMeasureSuspicious(p.hauteurMm)) r+=`<tr><td class="tech-label">⚠️ ALERTE</td><td class="tech-val alert">COTE < 100mm</td></tr>`;
+        
+        let dimText = `<strong>L ${p.largeurMm} x H ${p.hauteurMm} mm</strong>`;
+        if(p.monobloc && p.coffreADeduireMm) {
+            dimText += `<br><span style="font-size:0.8em;color:#666">Hauteur Totale: ${p.hauteurMm} - Coffre: ${p.coffreADeduireMm} = <strong>${p.hauteurMm - p.coffreADeduireMm} mm</strong> (Finale)</span>`;
+        }
+        add('Dimensions', dimText);
+
+        if(ValidationService.isMeasureSuspicious(p.largeurMm, p.monobloc)||ValidationService.isMeasureSuspicious(p.hauteurMm, p.monobloc)) r+=`<tr><td class="tech-label">⚠️ ALERTE</td><td class="tech-val alert">COTE < 100mm</td></tr>`;
         
         if(['FENETRE','BAIE_COULISSANTE','PORTE_ENTREE','PORTE_SERVICE'].includes(p.type)) {
           add('Matière',p.matiere); add('Profil',`${p.profil} ${p.profil==='ISO'?`(${p.isoMm}mm)`:''}`); add('Couleur',`${p.couleur} ${p.couleurAutre||''}`);
@@ -103,11 +137,18 @@
           if(p.type==='PORTE_ENTREE'){ add('Remplissage',p.remplissage === 'PANNEAU_DECORATIF_ALU' ? 'Panneau Déco Alu' : p.remplissage); add('Seuil PMR','OUI'); if(p.tierce)add('Tierce',`Passage: ${p.cotePassageMm}mm`); add('Ouv. Ext.',p.ouvertureExterieure); }
           if(p.type==='PORTE_SERVICE') add('Seuil PMR','OUI');
         }
-        if(p.type==='VOLET_ROULANT'){ add('Manoeuvre',p.manoeuvre); if(p.sortieCable)add('Sortie Câble',p.sortieCable); if(p.coupleMoteur)add('Couple',`${p.coupleMoteur}Nm`); if(p.boxDomotique)add('Box Domo','OUI'); if(p.monobloc)add('Monobloc',`Coffre -${p.coffreADeduireMm}mm`); if(p.lieAProduitId)add('Lié au ID',`#${products.find(x=>x.id===p.lieAProduitId)?.index}`); }
+        if(p.type==='VOLET_ROULANT'){ 
+            add('Manoeuvre',p.manoeuvre); 
+            if(p.sortieCable)add('Sortie Câble',p.sortieCable); 
+            if(p.manoeuvre !== 'FILAIRE') add('Box Domo', p.boxDomotique);
+            add('Couple', p.coupleMoteur ? `${p.coupleMoteur}Nm` : '');
+            add('Pose', p.pose);
+            if(p.monobloc) add('Monobloc',`OUI (Coffre: ${p.coffreADeduireMm}mm)`);
+            if(p.lieAProduitId) add('Lié à',`#${products.find(x=>x.id===p.lieAProduitId)?.index} (${products.find(x=>x.id===p.lieAProduitId)?.type})`);
+        }
         if(p.type==='AUTRE') add('Desc.',p.description);
         if(p.notes) r+=`<tr><td class="tech-label">Notes</td><td class="tech-val" style="font-style:italic;background:#fffbe0;">${p.notes}</td></tr>`;
 
-        // Gestion images
         let imgs = ''; if(p.photos && p.photos.length > 0) imgs = `<div class="photo-grid">${p.photos.map(src=>`<img src="${src}" class="photo-thumb"/>`).join('')}</div>`;
         let drawing = p.dessin && p.dessin.lines.length > 0 ? `<div class="drawing-box">${generateSVG(p.dessin)}</div>` : '';
 
@@ -123,8 +164,8 @@
       const vars={primary:"bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300",secondary:"bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200",whatsapp:"bg-green-500 text-white shadow-md",dark:"bg-slate-700 text-white",danger:"bg-red-50 text-red-600"};
       return <button onClick={onClick} disabled={disabled} className={`flex items-center justify-center px-4 py-3 rounded-lg font-medium transition-all active:scale-95 ${vars[variant]} ${className}`}>{Icon&&<Icon size={20} className="mr-2"/>}{children}</button>;
     };
-    const NumericInput=({label,value,onChange,suffix="mm",id, hasError})=>{
-      const susp=ValidationService.isMeasureSuspicious(value);
+    const NumericInput=({label,value,onChange,suffix="mm",id, hasError, monobloc=false})=>{
+      const susp=ValidationService.isMeasureSuspicious(value, monobloc);
       return <div className="flex flex-col mb-4" id={id}><label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{label}</label><div className="relative"><input type="number" inputMode="numeric" pattern="[0-9]*" value={value||''} onChange={e=>onChange(e.target.value?parseInt(e.target.value):undefined)} className={`w-full p-3 text-lg border-2 rounded-lg outline-none dark:bg-slate-900 dark:text-white transition-all ${hasError ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : susp ? 'border-amber-300 bg-amber-50' : 'border-slate-200 dark:border-slate-600 focus:border-blue-500'}`} placeholder="0"/><span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">{suffix}</span></div>{susp&&<div className="flex items-center text-amber-600 text-xs mt-1"><AlertTriangle size={12} className="mr-1"/> Attention &lt; 100{suffix}</div>}</div>;
     };
     const ToggleGroup=({label,options,value,onChange,id,hasError})=>{
@@ -157,8 +198,9 @@
       const [p, setP] = useState(initial); const [adv, setAdv] = useState(false); 
       const [errors, setErrors] = useState([]);
       const fileRef = useRef(null);
+      const { state } = useAppStore();
+      const products = state.products;
 
-      // Scroll to error
       useEffect(() => {
         if(errors.length > 0) {
           const el = document.getElementById(`field-${errors[0]}`);
@@ -166,7 +208,6 @@
         }
       }, [errors]);
 
-      // Auto-reset logic
       useEffect(() => {
         if (p.type === 'FENETRE' && p.hauteurMm > 2000) setP(x => ({...x, oscilloBattant: false}));
         if (p.type === 'PORTE_ENTREE' && p.largeurMm <= 1000) setP(x => ({...x, tierce: false, cotePassageMm: undefined}));
@@ -181,14 +222,11 @@
         onSave({...p, isValid: true, validationErrors: []});
       };
 
-      const handlePhoto = (e) => {
+      const handlePhoto = async (e) => {
         const file = e.target.files[0];
         if(file) {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            setP(prev => ({...prev, photos: [...(prev.photos||[]), reader.result]}));
-          };
-          reader.readAsDataURL(file);
+          const compressed = await compressImage(file);
+          setP(prev => ({...prev, photos: [...(prev.photos||[]), compressed]}));
         }
       };
 
@@ -206,7 +244,7 @@
           
           <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-20">
             <Card className="p-4">
-              <ToggleGroup label="Type" options={[{label:'Fenêtre',value:'FENETRE'},{label:'Baie',value:'BAIE_COULISSANTE'},{label:'Porte Ent.',value:'PORTE_ENTREE'},{label:'Porte Svc',value:'PORTE_SERVICE'},{label:'Volet',value:'VOLET_ROULANT'},{label:'Autre',value:'AUTRE'}]} value={p.type} onChange={v=>update('type',v)}/>
+              <ToggleGroup label="Type" options={[{label:'Fenêtre',value:'FENETRE'},{label:'Baie',value:'BAIE_COULISSANTE'},{label:'Porte Ent.',value:'PORTE_ENTREE'},{label:'Porte Service',value:'PORTE_SERVICE'},{label:'Volet',value:'VOLET_ROULANT'},{label:'Autre',value:'AUTRE'}]} value={p.type} onChange={v=>update('type',v)}/>
               <div className="flex justify-between items-center mb-4 bg-slate-100 dark:bg-slate-700 p-3 rounded-lg">
                 <span className="font-medium dark:text-white">Quantité</span>
                 <div className="flex items-center bg-white dark:bg-slate-800 rounded-lg border dark:border-slate-600">
@@ -248,15 +286,30 @@
             </Card>}
 
             {p.type==='VOLET_ROULANT'&&<Card className="p-4">
+              <div className="mb-4 bg-slate-100 dark:bg-slate-700 p-3 rounded">
+                  <label className="block text-sm font-medium mb-1 dark:text-white">Lier à une menuiserie</label>
+                  <select className="w-full p-2 border rounded dark:bg-slate-900 dark:text-white" value={p.lieAProduitId || ''} onChange={e => update('lieAProduitId', e.target.value)}>
+                    <option value="">-- Indépendant --</option>
+                    {products.filter(prod => prod.id !== p.id && ['FENETRE', 'BAIE_COULISSANTE'].includes(prod.type)).map(prod => (
+                      <option key={prod.id} value={prod.id}>#{prod.index} {prod.type} {prod.largeurMm}x{prod.hauteurMm}</option>
+                    ))}
+                  </select>
+              </div>
               <ToggleGroup id="field-manoeuvre" hasError={isErr('manoeuvre')} label="Manoeuvre" options={[{label:'Filaire',value:'FILAIRE'},{label:'Radio',value:'RADIO'},{label:'Solaire',value:'SOLAIRE'}]} value={p.manoeuvre} onChange={v=>update('manoeuvre',v)}/>
               {p.manoeuvre!=='SOLAIRE'&&<ToggleGroup id="field-sortieCable" hasError={isErr('sortieCable')} label="Câble" options={[{label:'Gauche',value:'GAUCHE'},{label:'Droite',value:'DROITE'}]} value={p.sortieCable} onChange={v=>update('sortieCable',v)}/>}
+              {p.manoeuvre!=='FILAIRE' && <BooleanToggle label="Box Domotique" value={p.boxDomotique} onChange={v=>update('boxDomotique',v)}/>}
+              
               <div className="mt-3 pt-3 border-t dark:border-slate-700">
-                <BooleanToggle label="Option Box Domotique" value={p.boxDomotique} onChange={v=>update('boxDomotique',v)}/>
-                <BooleanToggle label="Monobloc ?" value={p.monobloc} onChange={v=>update('monobloc',v)}/>{p.monobloc&&<NumericInput label="Hauteur Coffre" value={p.coffreADeduireMm} onChange={v=>update('coffreADeduireMm',v)}/>}
+                <BooleanToggle label="Monobloc ?" value={p.monobloc} onChange={v=>update('monobloc',v)}/>
+                {p.monobloc&&<div id="field-coffreADeduireMm"><NumericInput id="field-coffreADeduireMm" hasError={isErr('coffreADeduireMm')} label="Hauteur Coffre" value={p.coffreADeduireMm} onChange={v=>update('coffreADeduireMm',v)}/>
+                <div className="text-right text-sm font-bold text-blue-600">Passage: {p.hauteurMm && p.coffreADeduireMm ? p.hauteurMm - p.coffreADeduireMm : '-'} mm</div></div>}
               </div>
             </Card>}
 
-            {ValidationService.hasAdvancedOptions(p.type)&&<div className="border dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 overflow-hidden"><button onClick={()=>setAdv(!adv)} className="w-full flex justify-between p-3 bg-slate-50 dark:bg-slate-700 font-medium dark:text-white"><span>Options Avancées</span>{adv?<ChevronUp size={18}/>:<ChevronDown size={18}/>}</button>{adv&&<div className="p-4 space-y-3">{p.type.includes('PORTE')||p.type==='FENETRE'?<><BooleanToggle label="Ouv. Extérieure" value={p.ouvertureExterieure} onChange={v=>update('ouvertureExterieure',v)}/><BooleanToggle label="Serrure Clé" value={p.serrureCle} onChange={v=>update('serrureCle',v)}/></>:null}</div>}</div>}
+            {ValidationService.hasAdvancedOptions(p.type)&&<div className="border dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 overflow-hidden"><button onClick={()=>setAdv(!adv)} className="w-full flex justify-between p-3 bg-slate-50 dark:bg-slate-700 font-medium dark:text-white"><span>Options Avancées</span>{adv?<ChevronUp size={18}/>:<ChevronDown size={18}/>}</button>{adv&&<div className="p-4 space-y-3">
+                {(p.type.includes('PORTE')||p.type==='FENETRE')&&<><BooleanToggle label="Ouv. Extérieure" value={p.ouvertureExterieure} onChange={v=>update('ouvertureExterieure',v)}/><BooleanToggle label="Serrure Clé" value={p.serrureCle} onChange={v=>update('serrureCle',v)}/></>}
+                {p.type==='VOLET_ROULANT'&&<><ToggleGroup label="Couple" options={[{label:'10Nm',value:10},{label:'20Nm',value:20}]} value={p.coupleMoteur||10} onChange={v=>update('coupleMoteur',v)}/><ToggleGroup label="Pose" options={[{label:'Réno',value:'RENO'},{label:'Tradi',value:'TRADI'},{label:'Tunnel',value:'TUNNEL'}]} value={p.pose} onChange={v=>update('pose',v)}/></>}
+            </div>}</div>}
 
             <Card className="p-4">
               <h3 className="text-sm font-bold text-slate-500 mb-2 uppercase">Visuel & Notes</h3>
