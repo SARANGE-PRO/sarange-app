@@ -5,14 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Sarange Pro</title>
   
-  <!-- PWA / Mobile Settings (Vos fichiers locaux) -->
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <meta name="theme-color" content="#2563EB">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -30,11 +28,9 @@
     }
   </script>
 
-  <!-- React & Babel -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   
   <style>
-    /* Reset & Base */
     body { overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     input, textarea, select, button { font-size: 16px; touch-action: manipulation; } 
     .no-select { user-select: none; -webkit-user-select: none; }
@@ -42,12 +38,8 @@
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
     .dark ::-webkit-scrollbar-thumb { background: #475569; }
-
-    /* Autocomplete */
     .suggestions-list { max-height: 250px; overflow-y: auto; position: absolute; z-index: 50; width: 100%; background: white; border: 1px solid #e2e8f0; border-radius: 0.5rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); margin-top: 4px; }
     .dark .suggestions-list { background: #1e293b; border-color: #334155; }
-
-    /* Print */
     @media print {
       .no-print { display: none !important; }
       body { background: white !important; color: black !important; padding: 0 !important; margin: 0 !important; overflow: visible !important; }
@@ -70,21 +62,18 @@
       Plus, Trash2, Save, ArrowLeft, FileText, Check, AlertTriangle, PenTool, X, 
       ChevronDown, ChevronUp, Share, Printer, CheckCircle, Download, Eye, Clock, 
       MessageCircle, MapPin, Copy, Camera, Image as ImageIcon, Moon, Sun, 
-      LayoutDashboard, Search, Settings, AlertCircle 
+      LayoutDashboard, Search, Settings, AlertCircle, Mail
     } from 'https://esm.sh/lucide-react@0.263.1';
 
-    // --- ROBUST UTILS ---
+    // --- UTILS ---
     const generateUUID = () => {
-      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-        return crypto.randomUUID();
-      }
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
       return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
         var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
       });
     };
 
-    // --- DATABASE ENGINE ---
     const DB_NAME = 'SarangeDB_V2';
     const DB_VERSION = 1;
     const hasIDB = (typeof window !== 'undefined') && ('indexedDB' in window);
@@ -154,7 +143,8 @@
     const ValidationService = {
       isMeasureSuspicious: (v, isMonobloc) => {
           if (isMonobloc) return false;
-          return v !== undefined && v > 0 && v < 150;
+          // MODIFICATION: Seuil passé à 300mm
+          return v !== undefined && v > 0 && v < 300;
       },
       hasAdvancedOptions: (t) => ['FENETRE', 'VOLET_ROULANT', 'PORTE_ENTREE'].includes(t),
       validateProduct: (p) => {
@@ -177,7 +167,7 @@
           }
           if (p.type === 'PORTE_ENTREE') { 
             if (!p.remplissage) err.push("remplissage"); 
-            if (p.tierce && !p.cotePassageMm) err.push("cotePassageMm"); 
+            // Tierce and Cote Passage logic can be added here if strict validation needed
           }
         }
         if (p.type === 'VOLET_ROULANT') {
@@ -189,17 +179,22 @@
       }
     };
 
-    // --- EXPORT ---
     const generateSVG = (d) => {
         if (!d || !d.lines || d.lines.length === 0) return '';
         let p = ''; d.lines.forEach(l => { if (l.length < 2) return; let s = `M ${l[0].x} ${l[0].y}`; for (let i = 1; i < l.length; i++) s += ` L ${l[i].x} ${l[i].y}`; p += `<path d="${s}" stroke="#2563EB" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`; });
         return `<svg width="100%" height="100%" viewBox="0 0 350 250" preserveAspectRatio="xMidYMid meet">${p}</svg>`;
     };
 
-    const generateReportHTML = (c, products, date) => {
+    const generateReportHTML = (c, products, dateIso) => {
+      // MODIFICATION: Gestion date et heure + Marges CSS
+      const dateObj = new Date(dateIso);
+      const formattedDate = dateObj.toLocaleDateString('fr-FR');
+      const formattedTime = dateObj.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
       const styles = `
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; max-width: 1000px; margin: 0 auto; color: #1e293b; line-height: 1.4; }
+        @page { margin: 15mm; }
+        body { font-family: 'Inter', sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; color: #1e293b; line-height: 1.4; }
         .header { display: flex; justify-content: space-between; border-bottom: 3px solid #2563EB; padding-bottom: 20px; margin-bottom: 30px; }
         .client-box { background: #f8fafc; padding: 20px; border-radius: 8px; flex: 1; margin-right: 20px; border: 1px solid #e2e8f0; }
         .meta-box { flex: 0 0 300px; text-align: right; }
@@ -218,6 +213,7 @@
         .photo-img { width: 80px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid #eee; }
         .alert-text { color: #d97706; font-weight: bold; }
         .notes-box { margin-top: 10px; padding: 10px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 4px; color: #92400e; font-style: italic; }
+        @media print { body { padding: 0; margin: 0; } }
       `;
       
       let h = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relevé ${c.client}</title><style>${styles}</style></head>
@@ -232,7 +228,7 @@
               <div class="stat-badge" style="background:${c.typeContrat === 'FOURNITURE_ET_POSE' ? '#dcfce7;color:#166534' : '#dbeafe;color:#1e40af'}">
                 ${c.typeContrat === 'FOURNITURE_ET_POSE' ? 'FOURNITURE ET POSE' : 'FOURNITURE SEULE'}
               </div><br>
-              <strong>Date:</strong> ${new Date(c.date).toLocaleDateString()}<br>
+              <strong>Date:</strong> ${formattedDate} à ${formattedTime}<br>
               <strong>Produits:</strong> ${products.reduce((a, b) => a + (b.quantity || 1), 0)}<br>
             </div>
           </div>`;
@@ -248,7 +244,8 @@
         if(p.monobloc && p.coffreADeduireMm && p.hauteurMm) dim += `<br><span style="font-size:0.9em;color:#64748b">Passage = <strong>${p.hauteurMm - p.coffreADeduireMm} mm</strong> (Coffre ${p.coffreADeduireMm})</span>`;
         add('Dimensions', dim);
 
-        if(ValidationService.isMeasureSuspicious(p.largeurMm, p.monobloc)||ValidationService.isMeasureSuspicious(p.hauteurMm, p.monobloc)) r+=`<tr><td class="label">⚠️ Attention</td><td class="value alert-text">Cote < 150mm</td></tr>`;
+        // MODIFICATION: Seuil alerte 300mm
+        if(ValidationService.isMeasureSuspicious(p.largeurMm, p.monobloc)||ValidationService.isMeasureSuspicious(p.hauteurMm, p.monobloc)) r+=`<tr><td class="label">⚠️ Attention</td><td class="value alert-text">Cote < 300mm</td></tr>`;
 
         if(['FENETRE','BAIE_COULISSANTE','PORTE_ENTREE','PORTE_SERVICE'].includes(p.type)) {
           add('Matière',p.matiere); add('Profil',`${p.profil} ${p.profil==='ISO'?`(${p.isoMm}mm)`:''}`); add('Couleur',`${p.couleur} ${p.couleurAutre||''}`);
@@ -263,6 +260,7 @@
           if(p.type==='PORTE_ENTREE'){ 
               add('Remplissage',p.remplissage === 'PANNEAU_DECORATIF_ALU' ? 'Panneau Déco Alu' : p.remplissage); 
               add('Seuil PMR','OUI'); 
+              if(p.tierceImposte)add('Tierce/Imposte','OUI');
               if(p.tierce)add('Tierce',`Passage: ${p.cotePassageMm}mm`); 
               add('Ouv. Ext.',p.ouvertureExterieure); 
           }
@@ -314,9 +312,9 @@
       );
     };
 
-    const Input = ({ label, value, onChange, placeholder, type="text", error, inputMode, pattern }) => (
-      <div className="mb-4">
-        {label && <label className="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">{label}</label>}
+    const Input = ({ label, value, onChange, placeholder, type="text", error, inputMode, pattern, id }) => (
+      <div className="mb-4" id={id}>
+        {label && <label className={`block text-sm font-medium mb-1.5 ${error ? 'text-red-600' : 'text-slate-700 dark:text-slate-300'}`}>{label} {error && '*'}</label>}
         <input 
           type={type} 
           value={value||''} 
@@ -326,14 +324,14 @@
           pattern={pattern}
           className={`w-full p-3 rounded-lg bg-white dark:bg-slate-900 border ${error ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 dark:border-slate-700 focus:border-brand-500 focus:ring-1 focus:ring-brand-500'} outline-none transition-all dark:text-white`}
         />
-        {error && <span className="text-xs text-red-500 mt-1">{error}</span>}
+        {error && <span className="text-xs text-red-500 mt-1">Requis</span>}
       </div>
     );
 
-    const SelectToggle = ({ options, value, onChange, label }) => (
-      <div className="mb-4">
-        <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">{label}</label>
-        <div className="flex flex-wrap gap-2">
+    const SelectToggle = ({ options, value, onChange, label, error, id }) => (
+      <div className="mb-4" id={id}>
+        <label className={`block text-sm font-medium mb-2 ${error ? 'text-red-600' : 'text-slate-700 dark:text-slate-300'}`}>{label} {error && '*'}</label>
+        <div className={`flex flex-wrap gap-2 p-1 rounded-lg ${error ? 'border border-red-200 bg-red-50' : ''}`}>
           {options.map(opt => {
             const isActive = value === opt.value;
             return (
@@ -377,7 +375,7 @@
       );
     };
 
-    // --- RESTORED ORIGINAL DRAWING LOGIC (No Grid, Original Event Handling) ---
+    // --- ORIGINAL DRAWING CANVAS (Précis pour le doigt) ---
     const DrawingCanvas = ({ data, onChange }) => {
       const ref = useRef(null); 
       const [lines, setLines] = useState(data?.lines || []); 
@@ -577,7 +575,7 @@
         const check = ValidationService.validateProduct(p);
         if (!check.isValid) {
           setErrors(check.errors);
-          setTimeout(() => { const el = document.querySelector('.has-error'); if(el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100);
+          setTimeout(() => { const el = document.getElementById(`field-${check.errors[0]}`); if(el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100);
           return;
         }
         onSave({ ...p, isValid: true, validationErrors: [] });
@@ -591,7 +589,6 @@
       };
 
       const isErr = (field) => errors.includes(field);
-      const FieldErr = ({ field }) => isErr(field) ? <div className="text-red-500 text-xs mt-1 font-medium">Ce champ est requis</div> : null;
 
       return (
         <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950 z-50 flex flex-col h-full animate-fade-in">
@@ -609,45 +606,58 @@
                 <Input label="Localisation (Pièce)" value={p.room} onChange={v => update('room', v)} placeholder="Ex: Cuisine, Salon..." />
                 
                 {/* Description pour AUTRE */}
-                {p.type==='AUTRE' && <div className={isErr('description')?'has-error':''}><Input label="Description" value={p.description} onChange={v => update('description', v)} error={isErr('description') && 'Requis'}/></div>}
+                {p.type==='AUTRE' && <Input id="field-description" label="Description" value={p.description} onChange={v => update('description', v)} error={isErr('description')}/>}
 
-                <div className="grid grid-cols-2 gap-4"><div className={isErr('largeurMm') ? 'has-error' : ''}><Input label="Largeur (mm)" type="number" inputMode="numeric" pattern="[0-9]*" value={p.largeurMm} onChange={v => update('largeurMm', parseInt(v))} error={isErr('largeurMm') && 'Requis'} /></div><div className={isErr('hauteurMm') ? 'has-error' : ''}><Input label="Hauteur (mm)" type="number" inputMode="numeric" pattern="[0-9]*" value={p.hauteurMm} onChange={v => update('hauteurMm', parseInt(v))} error={isErr('hauteurMm') && 'Requis'} /></div></div>
+                <div className="grid grid-cols-2 gap-4"><Input id="field-largeurMm" label="Largeur (mm)" type="number" inputMode="numeric" pattern="[0-9]*" value={p.largeurMm} onChange={v => update('largeurMm', parseInt(v))} error={isErr('largeurMm')} /><Input id="field-hauteurMm" label="Hauteur (mm)" type="number" inputMode="numeric" pattern="[0-9]*" value={p.hauteurMm} onChange={v => update('hauteurMm', parseInt(v))} error={isErr('hauteurMm')} /></div>
                 {ValidationService.isMeasureSuspicious(p.largeurMm, p.monobloc) || ValidationService.isMeasureSuspicious(p.hauteurMm, p.monobloc) ? (<div className="text-orange-500 text-xs flex items-center mt-[-10px] mb-4"><AlertTriangle size={12} className="mr-1"/> Attention: Cotes très petites (&lt;150mm)</div>) : null}
               </div>
 
               {['FENETRE','BAIE_COULISSANTE','PORTE_ENTREE','PORTE_SERVICE'].includes(p.type) && (
                 <div className="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-slate-200 dark:border-slate-800">
                   <h3 className="text-xs font-bold text-slate-400 uppercase mb-4 tracking-wider">Caractéristiques</h3>
-                  <div className={isErr('matiere') ? 'has-error' : ''}><SelectToggle label="Matière" value={p.matiere} onChange={v => update('matiere', v)} options={[{label:'PVC', value:'PVC'}, {label:'Alu', value:'ALU'}]} /><FieldErr field="matiere"/></div>
-                  {p.matiere && (<div className={`mt-4 ${isErr('profil') ? 'has-error' : ''}`}><SelectToggle label="Type de Pose (Profil)" value={p.profil} onChange={v => update('profil', v)} options={p.matiere === 'PVC' ? [{label:'Neuf', value:'NEUF'}, {label:'Rénov 40', value:'RENO_40'}, {label:'Rénov 60', value:'RENO_60'}, {label:'ISO', value:'ISO'}] : [{label:'Neuf', value:'NEUF'}, {label:'Rénov', value:'RENO'}]} /><FieldErr field="profil"/></div>)}
-                  {p.profil === 'ISO' && <Input label="Aile ISO (mm)" type="number" inputMode="numeric" pattern="[0-9]*" value={p.isoMm} onChange={v => update('isoMm', parseInt(v))} error={isErr('isoMm') && 'Requis'} />}
-                  <div className={`mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 ${isErr('couleur') ? 'has-error' : ''}`}><SelectToggle label="Couleur" value={p.couleur} onChange={v => update('couleur', v)} options={p.matiere==='PVC' ? [{label:'Blanc',value:'BLANC'},{label:'Bicolor 7016',value:'BICOLOR_7016'},{label:'Autre',value:'AUTRE'}] : [{label:'Blanc',value:'BLANC'},{label:'Gris 7016',value:'GRIS_7016'},{label:'Autre',value:'AUTRE'}]} />{p.couleur === 'AUTRE' && <Input placeholder="Préciser couleur (ex: chêne doré)" value={p.couleurAutre} onChange={v => update('couleurAutre', v)} error={isErr('couleurAutre') && 'Requis'} />}</div>
+                  <SelectToggle id="field-matiere" label="Matière" value={p.matiere} onChange={v => update('matiere', v)} error={isErr('matiere')} options={[{label:'PVC', value:'PVC'}, {label:'Alu', value:'ALU'}]} />
+                  {p.matiere && <SelectToggle id="field-profil" label="Type de Pose (Profil)" value={p.profil} onChange={v => update('profil', v)} error={isErr('profil')} options={p.matiere === 'PVC' ? [{label:'Neuf', value:'NEUF'}, {label:'Rénov 40', value:'RENO_40'}, {label:'Rénov 60', value:'RENO_60'}, {label:'ISO', value:'ISO'}] : [{label:'Neuf', value:'NEUF'}, {label:'Rénov', value:'RENO'}]} />}
+                  {p.profil === 'ISO' && <Input id="field-isoMm" label="Aile ISO (mm)" type="number" inputMode="numeric" pattern="[0-9]*" value={p.isoMm} onChange={v => update('isoMm', parseInt(v))} error={isErr('isoMm')} />}
+                  <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <SelectToggle id="field-couleur" label="Couleur" value={p.couleur} onChange={v => update('couleur', v)} error={isErr('couleur')} options={p.matiere==='PVC' ? [{label:'Blanc',value:'BLANC'},{label:'Bicolor 7016',value:'BICOLOR_7016'},{label:'Autre',value:'AUTRE'}] : [{label:'Blanc',value:'BLANC'},{label:'Gris 7016',value:'GRIS_7016'},{label:'Autre',value:'AUTRE'}]} />
+                    {p.couleur === 'AUTRE' && <Input id="field-couleurAutre" placeholder="Préciser couleur (ex: chêne doré)" value={p.couleurAutre} onChange={v => update('couleurAutre', v)} error={isErr('couleurAutre')} />}
+                  </div>
                 </div>
               )}
 
               {(p.type === 'FENETRE' || p.type === 'BAIE_COULISSANTE') && (
-                <div className={`bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-slate-200 dark:border-slate-800 ${isErr('vitrageFlags') ? 'ring-2 ring-red-100 dark:ring-red-900' : ''}`}>
-                  <h3 className="text-xs font-bold text-slate-400 uppercase mb-3 tracking-wider">Vitrage</h3>
-                  <div className="grid grid-cols-2 gap-3">{[['standard','Standard 4/20/4'], ['g200','G200 (Imprimé)'], ['feuillete1f','SP10 1 Face'], ['feuillete2f','SP10 2 Faces']].map(([k, label]) => (<label key={k} className={`flex items-center p-3 rounded-lg border cursor-pointer transition-all ${p.vitrageFlags?.[k] ? 'bg-brand-50 border-brand-500 text-brand-700 dark:bg-brand-900/30' : 'border-slate-200 dark:border-slate-700 dark:text-white'}`}><input type="checkbox" className="w-5 h-5 rounded text-brand-600 focus:ring-brand-500" checked={!!p.vitrageFlags?.[k]} onChange={e => updateNested('vitrageFlags', k, e.target.checked)} /><span className="ml-2 text-sm font-medium">{label}</span></label>))}</div><FieldErr field="vitrageFlags"/>
+                <div id="field-vitrageFlags" className={`bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border ${isErr('vitrageFlags') ? 'border-red-500 ring-1 ring-red-500' : 'border-slate-200 dark:border-slate-800'}`}>
+                  <h3 className={`text-xs font-bold uppercase mb-3 tracking-wider ${isErr('vitrageFlags') ? 'text-red-500' : 'text-slate-400'}`}>Vitrage {isErr('vitrageFlags') && '*'}</h3>
+                  <div className="grid grid-cols-2 gap-3">{[['standard','Standard 4/20/4'], ['g200','G200 (Imprimé)'], ['feuillete1f','SP10 1 Face'], ['feuillete2f','SP10 2 Faces']].map(([k, label]) => (<label key={k} className={`flex items-center p-3 rounded-lg border cursor-pointer transition-all ${p.vitrageFlags?.[k] ? 'bg-brand-50 border-brand-500 text-brand-700 dark:bg-brand-900/30' : 'border-slate-200 dark:border-slate-700 dark:text-white'}`}><input type="checkbox" className="w-5 h-5 rounded text-brand-600 focus:ring-brand-500" checked={!!p.vitrageFlags?.[k]} onChange={e => updateNested('vitrageFlags', k, e.target.checked)} /><span className="ml-2 text-sm font-medium">{label}</span></label>))}</div>
+                </div>
+              )}
+
+              {p.type === 'FENETRE' && (
+                <div className="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-slate-200 dark:border-slate-800 space-y-4">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase mb-2 tracking-wider">Options Fenêtre</h3>
+                  <label className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700"><span className="dark:text-white font-medium">Oscillo-Battant</span> <input type="checkbox" className="w-6 h-6 accent-brand-600" checked={!!p.oscilloBattant} onChange={e=>update('oscilloBattant', e.target.checked)} disabled={p.hauteurMm > 2200}/></label>
+                  <label className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700"><span className="dark:text-white font-medium">Grille Ventilation</span> <input type="checkbox" className="w-6 h-6 accent-brand-600" checked={!!p.grilleVentilation} onChange={e=>update('grilleVentilation', e.target.checked)}/></label>
+                  <div>
+                    <label className="text-sm dark:text-slate-300 font-medium mb-2 block">Hauteur Poignée</label>
+                    <div className="flex gap-2">
+                      <button onClick={()=>update('poigneeHauteur','CENTREE')} className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium ${p.poigneeHauteur!=='AUTRE' ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'}`}>Centrée</button>
+                      <button onClick={()=>update('poigneeHauteur','AUTRE')} className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium ${p.poigneeHauteur==='AUTRE' ? 'bg-brand-600 text-white border-brand-600' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'}`}>Autre</button>
+                    </div>
+                    {p.poigneeHauteur==='AUTRE'&&<input type="number" inputMode="numeric" pattern="[0-9]*" className="mt-2 w-full p-3 border rounded-lg dark:bg-slate-900 dark:text-white dark:border-slate-700" placeholder="Hauteur en mm" value={p.poigneeHauteurMm||''} onChange={e=>update('poigneeHauteurMm',parseInt(e.target.value))}/>}
+                  </div>
                 </div>
               )}
 
               {p.type === 'VOLET_ROULANT' && (
                 <div className="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-slate-200 dark:border-slate-800">
-                  {/* FEATURE: LIER A UN PRODUIT */}
                   <div className="mb-4"><label className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">Lier à une menuiserie</label><select className="w-full p-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 dark:text-white" value={p.lieAProduitId||''} onChange={e=>update('lieAProduitId',e.target.value)}><option value="">-- Indépendant --</option>{state.products.filter(x=>['FENETRE','BAIE_COULISSANTE'].includes(x.type)).map(x=><option key={x.id} value={x.id}>#{x.index} {x.type}</option>)}</select></div>
-                  
-                  <SelectToggle label="Manoeuvre" value={p.manoeuvre} onChange={v => update('manoeuvre', v)} options={[{label:'Filaire',value:'FILAIRE'},{label:'Radio',value:'RADIO'},{label:'Solaire',value:'SOLAIRE'}]} />
-                  {p.manoeuvre && p.manoeuvre !== 'SOLAIRE' && (<SelectToggle label="Sortie Câble (Vue Int.)" value={p.sortieCable} onChange={v => update('sortieCable', v)} options={[{label:'Gauche',value:'GAUCHE'},{label:'Droite',value:'DROITE'}]} />)}
-                  
-                  {/* FEATURE: BOX DOMOTIQUE */}
+                  <SelectToggle id="field-manoeuvre" label="Manoeuvre" value={p.manoeuvre} onChange={v => update('manoeuvre', v)} error={isErr('manoeuvre')} options={[{label:'Filaire',value:'FILAIRE'},{label:'Radio',value:'RADIO'},{label:'Solaire',value:'SOLAIRE'}]} />
+                  {p.manoeuvre && p.manoeuvre !== 'SOLAIRE' && (<SelectToggle id="field-sortieCable" label="Sortie Câble (Vue Int.)" value={p.sortieCable} onChange={v => update('sortieCable', v)} error={isErr('sortieCable')} options={[{label:'Gauche',value:'GAUCHE'},{label:'Droite',value:'DROITE'}]} />)}
                   {p.manoeuvre !== 'FILAIRE' && <label className="flex items-center p-3 border rounded-lg bg-slate-50 dark:bg-slate-800 dark:border-slate-700 mt-4 mb-4"><input type="checkbox" className="w-5 h-5 accent-brand-600" checked={!!p.boxDomotique} onChange={e=>update('boxDomotique',e.target.checked)}/><span className="ml-3 font-medium dark:text-white">Box Domotique</span></label>}
-
-                  <div className="my-4"><label className="flex items-center justify-between p-3 border rounded-lg bg-slate-50 dark:bg-slate-800 dark:border-slate-700"><span className="font-medium dark:text-white">Volet Monobloc ?</span><input type="checkbox" className="w-6 h-6 accent-brand-600" checked={!!p.monobloc} onChange={e => update('monobloc', e.target.checked)} /></label>{p.monobloc && (<div className="mt-3 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg"><Input label="Hauteur Coffre à déduire" type="number" inputMode="numeric" pattern="[0-9]*" value={p.coffreADeduireMm} onChange={v => update('coffreADeduireMm', parseInt(v))} /><div className="text-right text-sm font-bold text-brand-600">Hauteur Passage: {p.hauteurMm && p.coffreADeduireMm ? p.hauteurMm - p.coffreADeduireMm : '-'} mm</div></div>)}</div>
+                  <div className="my-4" id="field-coffreADeduireMm"><label className="flex items-center justify-between p-3 border rounded-lg bg-slate-50 dark:bg-slate-800 dark:border-slate-700"><span className="font-medium dark:text-white">Volet Monobloc ?</span><input type="checkbox" className="w-6 h-6 accent-brand-600" checked={!!p.monobloc} onChange={e => update('monobloc', e.target.checked)} /></label>{p.monobloc && (<div className="mt-3 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg"><Input label="Hauteur Coffre à déduire" type="number" inputMode="numeric" pattern="[0-9]*" value={p.coffreADeduireMm} onChange={v => update('coffreADeduireMm', parseInt(v))} error={isErr('coffreADeduireMm')} /><div className="text-right text-sm font-bold text-brand-600">Hauteur Passage: {p.hauteurMm && p.coffreADeduireMm ? p.hauteurMm - p.coffreADeduireMm : '-'} mm</div></div>)}</div>
                 </div>
               )}
 
-              {/* FEATURE: OPTIONS AVANCEES (Including Grille Ventil & Poignée) */}
               {ValidationService.hasAdvancedOptions(p.type) && (
                 <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
                   <button onClick={() => setAdv(!adv)} className="w-full flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-800/50 font-medium text-slate-700 dark:text-slate-300"><span>Options Avancées</span>{adv ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}</button>
@@ -656,21 +666,8 @@
                       {(p.type.includes('FENETRE') || p.type.includes('PORTE')) && (
                         <div className="space-y-3">
                           <label className="flex items-center justify-between"><span className="dark:text-white">Ouverture Extérieure</span> <input type="checkbox" className="w-5 h-5 accent-brand-600" checked={!!p.ouvertureExterieure} onChange={e=>update('ouvertureExterieure', e.target.checked)}/></label>
-                          <label className="flex items-center justify-between"><span className="dark:text-white">Serrure à clé</span> <input type="checkbox" className="w-5 h-5 accent-brand-600" checked={!!p.serrureCle} onChange={e=>update('serrureCle', e.target.checked)}/></label>
-                          {p.type === 'FENETRE' && (
-                            <>
-                              <label className="flex items-center justify-between"><span className="dark:text-white">Oscillo-Battant</span> <input type="checkbox" className="w-5 h-5 accent-brand-600" checked={!!p.oscilloBattant} onChange={e=>update('oscilloBattant', e.target.checked)} disabled={p.hauteurMm > 2200}/></label>
-                              <label className="flex items-center justify-between"><span className="dark:text-white">Grille Ventilation</span> <input type="checkbox" className="w-5 h-5 accent-brand-600" checked={!!p.grilleVentilation} onChange={e=>update('grilleVentilation', e.target.checked)}/></label>
-                              <div className="pt-2 border-t dark:border-slate-700 mt-2">
-                                <label className="text-sm dark:text-slate-300 font-medium">Hauteur Poignée</label>
-                                <div className="flex gap-4 mt-2">
-                                  <label className="flex items-center"><input type="radio" className="accent-brand-600" checked={p.poigneeHauteur!=='AUTRE'} onChange={()=>update('poigneeHauteur','CENTREE')}/> <span className="ml-2 dark:text-white">Centrée</span></label>
-                                  <label className="flex items-center"><input type="radio" className="accent-brand-600" checked={p.poigneeHauteur==='AUTRE'} onChange={()=>update('poigneeHauteur','AUTRE')}/> <span className="ml-2 dark:text-white">Autre</span></label>
-                                </div>
-                                {p.poigneeHauteur==='AUTRE'&&<input type="number" inputMode="numeric" pattern="[0-9]*" className="mt-2 w-32 p-2 border rounded dark:bg-slate-800 dark:text-white dark:border-slate-600" placeholder="mm" value={p.poigneeHauteurMm||''} onChange={e=>update('poigneeHauteurMm',parseInt(e.target.value))}/>}
-                              </div>
-                            </>
-                          )}
+                          {p.type !== 'PORTE_ENTREE' && <label className="flex items-center justify-between"><span className="dark:text-white">Serrure à clé</span> <input type="checkbox" className="w-5 h-5 accent-brand-600" checked={!!p.serrureCle} onChange={e=>update('serrureCle', e.target.checked)}/></label>}
+                          {p.type === 'PORTE_ENTREE' && <label className="flex items-center justify-between"><span className="dark:text-white font-bold">Tierce / Imposte ?</span> <input type="checkbox" className="w-6 h-6 accent-brand-600" checked={!!p.tierceImposte} onChange={e=>update('tierceImposte', e.target.checked)}/></label>}
                         </div>
                       )}
                       {p.type === 'VOLET_ROULANT' && (<div><SelectToggle label="Couple Moteur" value={p.coupleMoteur || 10} onChange={v=>update('coupleMoteur', v)} options={[{label:'10 Nm', value:10}, {label:'20 Nm', value:20}]}/><SelectToggle label="Type Pose VR" value={p.pose || 'RENO'} onChange={v=>update('pose', v)} options={[{label:'Rénov', value:'RENO'}, {label:'Tradi', value:'TRADI'}, {label:'Tunnel', value:'TUNNEL'}]}/></div>)}
@@ -679,14 +676,13 @@
                 </div>
               )}
 
-              {/* FEATURE: Porte Entrée Tierce */}
               {p.type==='PORTE_ENTREE'&& (
                 <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border dark:border-slate-800">
-                  <SelectToggle label="Remplissage" value={p.remplissage} onChange={v=>update('remplissage',v)} options={[{label:'Panneau Déco Alu',value:'PANNEAU_DECORATIF_ALU'},{label:'Sandwich',value:'PANNEAU_SANDWICH'},{label:'Vitrée',value:'VITREE'}]}/>
+                  <SelectToggle id="field-remplissage" label="Remplissage" value={p.remplissage} onChange={v=>update('remplissage',v)} error={isErr('remplissage')} options={[{label:'Panneau Déco Alu',value:'PANNEAU_DECORATIF_ALU'},{label:'Sandwich',value:'PANNEAU_SANDWICH'},{label:'Vitrée',value:'VITREE'}]}/>
                   {p.largeurMm>1000 && (
                     <div className="mt-3 pt-3 border-t dark:border-slate-700">
                       <label className="flex items-center justify-between mb-3"><span className="dark:text-white font-medium">Tierce ?</span> <input type="checkbox" className="w-6 h-6 accent-brand-600" checked={!!p.tierce} onChange={e=>update('tierce',e.target.checked)}/></label>
-                      {p.tierce&&<Input label="Cote Passage (mm)" type="number" inputMode="numeric" pattern="[0-9]*" value={p.cotePassageMm} onChange={v=>update('cotePassageMm',v)}/>}
+                      {p.tierce&&<Input id="field-cotePassageMm" label="Cote Passage (mm)" type="number" inputMode="numeric" pattern="[0-9]*" value={p.cotePassageMm} onChange={v=>update('cotePassageMm',v)} error={isErr('cotePassageMm')} />}
                     </div>
                   )}
                 </div>
@@ -705,58 +701,36 @@
 
     const FinalizeModal = ({ chantier, products, onClose, onUpdate }) => {
       const incomplete = products.filter(p => !p.isValid);
-      
       const prepareFile = () => {
          const date = new Date().toISOString();
          onUpdate({ dateFinalisation: date });
          const html = generateReportHTML(chantier, products, date);
-         return new File([html], `Releve_${chantier.client.replace(/\s+/g,'_')}.html`, { type: 'text/html' });
-      };
+         
+         const d = new Date();
+         const day = String(d.getDate()).padStart(2, '0');
+         const month = String(d.getMonth() + 1).padStart(2, '0');
+         const year = d.getFullYear();
+         const filenameDate = `${day}-${month}-${year}`;
 
+         return new File([html], `Releve_${chantier.client.replace(/\s+/g,'_')}_${filenameDate}.html`, { type: 'text/html' });
+      };
       const share = async () => {
          const file = prepareFile();
          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            try {
-               await navigator.share({
-                  files: [file],
-                  title: `Relevé ${chantier.client}`,
-                  text: `Voici le relevé pour ${chantier.client}`
-               });
-            } catch (err) { console.log(err); }
-         } else {
-            alert("Le partage de fichiers n'est pas supporté. Utilisez l'option Imprimer.");
-         }
+            try { await navigator.share({ files: [file], title: `Relevé ${chantier.client}`, text: `Voici le relevé pour ${chantier.client}` }); } catch (err) { console.log(err); }
+         } else { alert("Le partage de fichiers n'est pas supporté. Utilisez l'option Imprimer."); }
       };
-
       const print = () => {
-         const file = prepareFile();
-         const url = URL.createObjectURL(file);
-         const win = window.open(url, '_blank');
-         if(!win) alert("Pop-up bloqué.");
+         const file = prepareFile(); const url = URL.createObjectURL(file); const win = window.open(url, '_blank'); if(!win) alert("Pop-up bloqué.");
       };
-
       return (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl text-center">
-             <div className="mb-4 flex justify-center"><div className={`p-4 rounded-full ${incomplete.length ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>{incomplete.length ? <AlertTriangle size={32}/> : <CheckCircle size={32}/>}</div></div>
-             <h3 className="text-xl font-bold mb-2 dark:text-white">Finaliser le dossier</h3>
-             {incomplete.length > 0 ? (<p className="text-orange-600 mb-6 bg-orange-50 dark:bg-orange-900/20 p-3 rounded-lg text-sm">Il reste <strong>{incomplete.length} produits incomplets</strong>. Vous devriez les vérifier avant d'exporter.</p>) : (<p className="text-slate-500 mb-6 text-sm">Le dossier est complet.</p>)}
-             <div className="space-y-3">
-               <Button onClick={share} variant="whatsapp" className="w-full" icon={Share}>Partager (WhatsApp/Mail)</Button>
-               <Button onClick={print} variant="secondary" className="w-full" icon={Printer}>Imprimer / Sauvegarder PDF</Button>
-               <Button onClick={onClose} variant="ghost" className="w-full">Retour</Button>
-             </div>
-          </div>
-        </div>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in"><div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl text-center"><div className="mb-4 flex justify-center"><div className={`p-4 rounded-full ${incomplete.length ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>{incomplete.length ? <AlertTriangle size={32}/> : <CheckCircle size={32}/>}</div></div><h3 className="text-xl font-bold mb-2 dark:text-white">Finaliser le dossier</h3>{incomplete.length > 0 ? (<p className="text-orange-600 mb-6 bg-orange-50 dark:bg-orange-900/20 p-3 rounded-lg text-sm">Il reste <strong>{incomplete.length} produits incomplets</strong>. Vous devriez les vérifier avant d'exporter.</p>) : (<p className="text-slate-500 mb-6 text-sm">Le dossier est complet.</p>)}<div className="space-y-3"><Button onClick={share} variant="whatsapp" className="w-full" icon={Share}>Partager (WhatsApp/Mail)</Button><Button onClick={print} variant="secondary" className="w-full" icon={Printer}>Imprimer / Sauvegarder PDF</Button><Button onClick={onClose} variant="ghost" className="w-full">Retour</Button></div></div></div>
       );
     };
 
     const root = createRoot(document.getElementById('root'));
     root.render(<App />);
-
-    if('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
-    }
+    if('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
   </script>
 </body>
 </html>
