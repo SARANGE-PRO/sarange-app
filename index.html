@@ -18,6 +18,18 @@
     body { overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; }
     input, textarea, select { font-size: 16px; } 
     .no-select { user-select: none; -webkit-user-select: none; }
+    /* Animation pour les suggestions d'adresse */
+    .suggestions-list {
+      max-height: 200px;
+      overflow-y: auto;
+      position: absolute;
+      z-index: 50;
+      width: 100%;
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 0 0 0.5rem 0.5rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
   </style>
 </head>
 <body class="bg-slate-100 text-slate-900 no-select">
@@ -33,10 +45,9 @@
     
     import React, { useState, useEffect, useRef, useMemo, createContext, useContext } from 'https://esm.sh/react@18.2.0';
     import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
-    // Ajout de MessageCircle pour l'icône WhatsApp
     import { 
       Plus, Trash2, Save, ArrowLeft, FileText, Check, AlertTriangle, 
-      PenTool, X, ChevronDown, ChevronUp, Share, Printer, CheckCircle, Download, Eye, Clock, MessageCircle
+      PenTool, X, ChevronDown, ChevronUp, Share, Printer, CheckCircle, Download, Eye, Clock, MessageCircle, MapPin
     } from 'https://esm.sh/lucide-react@0.263.1';
 
     // --- 1. LOGIQUE METIER ---
@@ -89,7 +100,80 @@
       return context;
     };
 
-    // --- 3. COMPOSANTS UI ---
+    // --- 3. NOUVEAU COMPOSANT: AUTOCOMPLETION ADRESSE ---
+    const AddressAutocomplete = ({ value, onChange }) => {
+      const [suggestions, setSuggestions] = useState([]);
+      const [isOpen, setIsOpen] = useState(false);
+      const wrapperRef = useRef(null);
+
+      // Fermer la liste si on clique ailleurs
+      useEffect(() => {
+        function handleClickOutside(event) {
+          if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+            setIsOpen(false);
+          }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+      }, [wrapperRef]);
+
+      const handleInput = async (e) => {
+        const val = e.target.value;
+        onChange(val);
+        
+        if (val.length > 3) {
+          try {
+            // Appel API Gouvernementale (Gratuit & Sécurisé)
+            const response = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(val)}&limit=5`);
+            const data = await response.json();
+            if (data.features) {
+              setSuggestions(data.features);
+              setIsOpen(true);
+            }
+          } catch (err) {
+            console.error("Erreur API Adresse", err);
+          }
+        } else {
+          setIsOpen(false);
+        }
+      };
+
+      const selectAddress = (feature) => {
+        onChange(feature.properties.label);
+        setIsOpen(false);
+      };
+
+      return (
+        <div className="relative w-full mb-3" ref={wrapperRef}>
+          <div className="relative">
+            <input 
+              className="w-full p-2 pl-10 border rounded transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" 
+              placeholder="Adresse complète (tapez pour rechercher...)" 
+              value={value} 
+              onChange={handleInput} 
+            />
+            <MapPin size={18} className="absolute left-3 top-3 text-slate-400" />
+          </div>
+          
+          {isOpen && suggestions.length > 0 && (
+            <ul className="suggestions-list">
+              {suggestions.map((s) => (
+                <li 
+                  key={s.properties.id} 
+                  onClick={() => selectAddress(s)}
+                  className="p-3 border-b hover:bg-blue-50 cursor-pointer text-sm flex flex-col"
+                >
+                  <span className="font-medium text-slate-800">{s.properties.name}</span>
+                  <span className="text-xs text-slate-500">{s.properties.postcode} {s.properties.city}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      );
+    };
+
+    // --- 4. COMPOSANTS UI ---
     
     const Card = ({ children, className = "" }) => (
       <div className={`bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden ${className}`}>
@@ -102,7 +186,7 @@
       const variants = {
         primary: "bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300",
         secondary: "bg-slate-100 text-slate-700 hover:bg-slate-200",
-        whatsapp: "bg-green-500 text-white hover:bg-green-600 shadow-md", // Nouveau style WhatsApp
+        whatsapp: "bg-green-500 text-white hover:bg-green-600 shadow-md",
         dark: "bg-slate-700 text-white hover:bg-slate-800",
         danger: "bg-red-50 text-red-600 hover:bg-red-100",
       };
@@ -254,7 +338,7 @@
       );
     };
 
-    // --- 4. PRODUCT EDITOR ---
+    // --- 5. PRODUCT EDITOR ---
     const ProductEditor = ({ product: initialProduct, onSave, onCancel }) => {
       const [p, setP] = useState(initialProduct);
       const [showAdvanced, setShowAdvanced] = useState(false);
@@ -454,7 +538,7 @@
       );
     };
 
-    // --- 5. EXPORT ---
+    // --- 6. EXPORT ---
     
     // SVG GEN
     const generateSVGFromDrawing = (drawing) => {
@@ -499,7 +583,7 @@
         @media print { .no-print { display: none; } button { display: none; } body { padding: 0; } }
       `;
 
-      // MODIFICATION 1 & 3: Titre "Fiche métrage" et suppression Technicien
+      // MODIFICATION: Titre "Fiche métrage" et suppression Technicien
       let html = `<html><head><meta charset="utf-8"><title>Relevé - ${chantier.client}</title><style>${styles}</style></head><body><div class="no-print" style="margin-bottom:20px; text-align:right;"><button onclick="window.print()" style="background:#2563EB; color:white; padding:10px 20px; border:none; border-radius:6px; cursor:pointer;">Imprimer / PDF</button></div><h1>SARANGE - Fiche métrage</h1><table class="header-table"><tr><td><div class="header-label">Client</div><div class="header-value">${chantier.client}</div><div class="header-label">Adresse</div><div class="header-value">${chantier.adresse}</div><div class="header-label">Contacts</div><div class="header-value">Tél: ${chantier.telephone} ${chantier.email ? `<br>Email: ${chantier.email}` : ''}</div></td><td><div class="header-label">Contrat</div><div class="header-value" style="color:${chantier.typeContrat === 'FOURNITURE_ET_POSE' ? '#16a34a' : '#2563EB'}">${chantier.typeContrat === 'FOURNITURE_ET_POSE' ? '✅ FOURNITURE ET POSE' : '📦 FOURNITURE SEULE'}</div><div class="header-label">Date Relevé</div><div class="header-value">${new Date(chantier.date).toLocaleDateString()}</div></td></tr></table><div class="stats-bar"><div class="stat-item"><strong>${products.length}</strong> Produits</div><div class="stat-item"><strong>${products.filter(p => !!p.dessin?.lines.length).length}</strong> Dessins</div><div class="stat-item" style="color:#d97706"><strong>${products.filter(p => p.largeurMm && p.largeurMm < 100).length}</strong> Cotes Suspectes</div></div><h3>Détails Techniques (Atelier)</h3>`;
 
       products.forEach(p => {
@@ -535,7 +619,7 @@
       return html;
     };
 
-    // --- 6. CHANTIER LIST ---
+    // --- 7. CHANTIER LIST ---
     const ChantiersList = () => {
       const { state, addChantier, selectChantier, deleteChantier } = useAppStore();
       const [isAdding, setIsAdding] = useState(false);
@@ -569,8 +653,14 @@
                    <option value="FOURNITURE_ET_POSE">Fourniture et Pose</option>
                  </select>
               </div>
-              <input className="w-full mb-3 p-2 border rounded" placeholder="Adresse complète" value={newC.adresse} onChange={e => setNewC({...newC, adresse: e.target.value})} />
-              <div className="flex justify-end gap-2">
+              
+              {/* REMPLACEMENT DE L'INPUT ADRESSE PAR LE COMPOSANT D'AUTOCOMPLETION */}
+              <AddressAutocomplete 
+                value={newC.adresse} 
+                onChange={(val) => setNewC({...newC, adresse: val})} 
+              />
+
+              <div className="flex justify-end gap-2 mt-4">
                 <Button variant="secondary" onClick={() => setIsAdding(false)}>Annuler</Button>
                 <Button onClick={handleAdd}>Créer Dossier</Button>
               </div>
@@ -601,7 +691,7 @@
       );
     };
 
-    // --- 7. FINALIZE ---
+    // --- 8. FINALIZE ---
     const FinalizeModal = ({ chantier, products, onClose, onUpdateChantier }) => {
       const incompletes = products.filter(p => !p.isValid);
       const warnings = products.filter(p => ValidationService.isMeasureSuspicious(p.largeurMm) || ValidationService.isMeasureSuspicious(p.hauteurMm));
@@ -614,7 +704,7 @@
         const html = generateReportHTML(chantier, products, finalizationTime);
         const blob = new Blob([html], { type: 'text/html' });
         
-        // MODIFICATION 2: Format de date JJ-MM-AAAA
+        // MODIFICATION: Format de date JJ-MM-AAAA
         const dateObj = new Date(finalizationTime);
         const day = String(dateObj.getDate()).padStart(2, '0');
         const month = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -624,7 +714,7 @@
         return { blob, filename };
       };
 
-      // MODIFICATION 4A: Fonction de Téléchargement Classique
+      // MODIFICATION: Fonction de Téléchargement
       const handleDownload = () => {
         const { blob, filename } = prepareFile();
         const url = URL.createObjectURL(blob);
@@ -635,7 +725,7 @@
         setIsExporting(true);
       };
 
-      // MODIFICATION 4B: Fonction de Partage WhatsApp (Web Share API)
+      // MODIFICATION: Fonction de Partage WhatsApp
       const handleShare = async () => {
         try {
           const { blob, filename } = prepareFile();
@@ -649,7 +739,7 @@
             });
             setIsExporting(true);
           } else {
-            alert("Le partage direct de fichier n'est pas supporté sur cet appareil. Utilisez le bouton 'Télécharger' ci-dessous.");
+            alert("Le partage direct n'est pas supporté sur cet appareil. Utilisez le téléchargement.");
           }
         } catch (error) {
           console.error("Erreur partage:", error);
@@ -707,60 +797,6 @@
               <button onClick={onClose} className="mt-2 text-slate-500 text-sm hover:underline">Fermer</button>
             </div>
           </div>
-        </div>
-      );
-    };
-
-    // --- 8. CHANTIER DETAIL ---
-    const ChantierDetail = () => {
-      const { state, selectChantier, saveProduct, deleteProduct, updateChantier } = useAppStore();
-      const chantier = state.chantiers.find(c => c.id === state.currentChantierId);
-      const products = state.products.filter(p => p.chantierId === chantier?.id).sort((a,b) => a.index - b.index);
-      const [editingProduct, setEditingProduct] = useState(null);
-      const [showFinalize, setShowFinalize] = useState(false);
-
-      if (!chantier) return <div>Chargement...</div>;
-
-      const handleCreateProduct = () => {
-        setEditingProduct({
-          id: generateUUID(), chantierId: chantier.id, index: products.length + 1, type: 'FENETRE',
-          dateCreation: new Date().toISOString(), dateMaj: new Date().toISOString(), photos: [], isValid: false, validationErrors: []
-        });
-      };
-
-      if (editingProduct) return <ProductEditor product={editingProduct} onSave={(p) => { saveProduct(p); setEditingProduct(null); }} onCancel={() => setEditingProduct(null)} />;
-
-      return (
-        <div className="flex flex-col h-screen bg-slate-50">
-          <div className="bg-white border-b px-4 py-3 flex items-center shadow-sm sticky top-0 z-10">
-            <button onClick={() => selectChantier(null)} className="mr-3 p-2 hover:bg-slate-100 rounded-full"><ArrowLeft size={24}/></button>
-            <div className="flex-1">
-              <h2 className="font-bold text-lg truncate">{chantier.client}</h2>
-              <div className="flex items-center text-xs text-slate-500">
-                  <span>{products.length} Produits</span><span className="mx-2">•</span>
-                  <span>{chantier.typeContrat === 'FOURNITURE_ET_POSE' ? 'Pose Incluse' : 'Fourniture Seule'}</span>
-                  {chantier.dateFinalisation && <span className="ml-2 text-purple-600 font-bold flex items-center"><Clock size={10} className="mr-1"/> {new Date(chantier.dateFinalisation).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>}
-              </div>
-            </div>
-            <button onClick={() => setShowFinalize(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center shadow-sm hover:bg-blue-700">Finaliser <CheckCircle size={16} className="ml-2"/></button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {products.map(p => (
-              <div key={p.id} onClick={() => setEditingProduct(p)} className={`bg-white p-4 rounded-lg border-l-4 shadow-sm flex justify-between items-center cursor-pointer active:bg-slate-50 ${p.isValid ? 'border-l-green-500' : 'border-l-amber-500'}`}>
-                <div>
-                  <div className="flex items-center space-x-2"><span className="font-mono font-bold text-slate-400">#{String(p.index).padStart(2,'0')}</span><span className="font-bold text-slate-800">{p.type}</span></div>
-                  <div className="text-sm text-slate-600 mt-1">{p.largeurMm ? `${p.largeurMm} x ${p.hauteurMm} mm` : 'Dimensions manquantes'}</div>
-                  {ValidationService.isMeasureSuspicious(p.largeurMm) && <span className="text-amber-500 text-xs font-bold flex items-center mt-1"><AlertTriangle size={10} className="mr-1"/> Cote suspecte</span>}
-                </div>
-                <div className="flex flex-col items-end space-y-2">
-                  {!p.isValid && <AlertTriangle size={18} className="text-amber-500" />}
-                  <button onClick={(e) => { e.stopPropagation(); if(confirm('Supprimer ?')) deleteProduct(p.id); }} className="text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>
-                </div>
-              </div>
-            ))}
-            <button onClick={handleCreateProduct} className="w-full py-4 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 font-medium hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 flex flex-col items-center justify-center"><Plus size={32} className="mb-2 opacity-50" /> Ajouter un Produit</button>
-          </div>
-          {showFinalize && <FinalizeModal chantier={chantier} products={products} onClose={() => setShowFinalize(false)} onUpdateChantier={updateChantier} />}
         </div>
       );
     };
