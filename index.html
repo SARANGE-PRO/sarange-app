@@ -21,8 +21,11 @@
             slate: { 850: '#1a202c', 950: '#0f172a' },
             brand: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563EB', 700: '#1d4ed8' }
           },
-          animation: { 'fade-in': 'fadeIn 0.3s ease-out' },
-          keyframes: { fadeIn: { '0%': { opacity: '0', transform: 'translateY(10px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } } }
+          animation: { 'fade-in': 'fadeIn 0.3s ease-out', 'slide-up': 'slideUp 0.3s ease-out' },
+          keyframes: { 
+            fadeIn: { '0%': { opacity: '0', transform: 'translateY(10px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+            slideUp: { '0%': { transform: 'translateY(100%)', opacity: '0' }, '100%': { transform: 'translateY(0)', opacity: '1' } }
+          }
         }
       }
     }
@@ -62,7 +65,7 @@
       Plus, Trash2, Save, ArrowLeft, FileText, Check, AlertTriangle, PenTool, X, 
       ChevronDown, ChevronUp, Share, Printer, CheckCircle, Download, Eye, Clock, 
       MessageCircle, MapPin, Copy, Camera, Image as ImageIcon, Moon, Sun, 
-      LayoutDashboard, Search, Settings, AlertCircle, Mail, Maximize
+      LayoutDashboard, Search, Settings, AlertCircle, Mail, Maximize, Droplets
     } from 'https://esm.sh/lucide-react@0.263.1';
 
     // --- UTILS ---
@@ -500,9 +503,28 @@
       const [loading, setLoading] = useState(true);
       const [view, setView] = useState('list');
       const [dark, setDark] = useState(false);
-      useEffect(() => { const init = async () => { try { const oldData = localStorage.getItem('sarange_db_v3'); let data; if (oldData) { data = JSON.parse(oldData); await Storage.set('sarange_root', data); localStorage.removeItem('sarange_db_v3'); } else { data = await Storage.get('sarange_root'); } if (data) setState(data); } catch (e) { console.error("DB Error", e); } finally { setLoading(false); } }; init(); }, []);
+      
+      useEffect(() => {
+        const init = async () => {
+          try {
+            const oldData = localStorage.getItem('sarange_db_v3');
+            let data;
+            if (oldData) {
+              data = JSON.parse(oldData);
+              await Storage.set('sarange_root', data);
+              localStorage.removeItem('sarange_db_v3');
+            } else {
+              data = await Storage.get('sarange_root');
+            }
+            if (data) setState(data);
+          } catch (e) { console.error("DB Error", e); } finally { setLoading(false); }
+        };
+        init();
+      }, []);
+
       useEffect(() => { if (!loading) Storage.set('sarange_root', state); }, [state, loading]);
       useEffect(() => { if (dark) document.documentElement.classList.add('dark'); else document.documentElement.classList.remove('dark'); }, [dark]);
+
       const actions = {
         addChantier: c => setState(s => ({ ...s, chantiers: [{ ...c, id: generateUUID() }, ...s.chantiers] })),
         updateChantier: (id, d) => setState(s => ({ ...s, chantiers: s.chantiers.map(x => x.id === id ? { ...x, ...d } : x) })),
@@ -512,21 +534,35 @@
         deleteProduct: id => setState(s => ({ ...s, products: s.products.filter(x => x.id !== id) })),
         duplicateChantier: (id) => { const c = state.chantiers.find(x => x.id === id); if(!c) return; const newId = generateUUID(); const newC = { ...c, id: newId, client: c.client + " (Copie)", date: new Date().toISOString(), dateFinalisation: null }; const cProds = state.products.filter(p => p.chantierId === id).map(p => ({ ...p, id: generateUUID(), chantierId: newId })); setState(s => ({ ...s, chantiers: [newC, ...s.chantiers], products: [...s.products, ...cProds] })); }
       };
+
       if (loading) return null;
-      return <AppContext.Provider value={{ state, ...actions }}><div className="min-h-screen flex flex-col safe-pb">{!state.currentChantierId ? <DashboardView onNew={() => setView('new')} viewMode={view} setViewMode={setView} isDark={dark} toggleDark={() => setDark(!dark)} /> : <ChantierDetailView />}</div></AppContext.Provider>;
+
+      return (
+        <AppContext.Provider value={{ state, ...actions }}>
+          <div className="min-h-screen flex flex-col safe-pb">
+            {!state.currentChantierId ? <DashboardView onNew={() => setView('new')} viewMode={view} setViewMode={setView} isDark={dark} toggleDark={() => setDark(!dark)} /> : <ChantierDetailView />}
+          </div>
+        </AppContext.Provider>
+      );
     };
 
     const AppContext = createContext(null);
     const useApp = () => useContext(AppContext);
 
+    // --- VIEWS ---
     const DashboardView = ({ onNew, viewMode, setViewMode, isDark, toggleDark }) => {
       const { state, selectChantier, deleteChantier, duplicateChantier } = useApp();
-      const [search, setSearch] = useState(''); const [showNewModal, setShowNewModal] = useState(false);
+      const [search, setSearch] = useState('');
+      const [showNewModal, setShowNewModal] = useState(false);
       const filtered = state.chantiers.filter(c => c.client.toLowerCase().includes(search.toLowerCase()) || c.adresse.toLowerCase().includes(search.toLowerCase()));
+
       return (
         <>
           <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-20 px-4 py-3">
-            <div className="flex justify-between items-center mb-4 max-w-5xl mx-auto"><div className="flex items-center gap-2"><div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold">S</div><h1 className="text-xl font-bold tracking-tight">Sarange<span className="text-brand-600">Pro</span></h1></div><button onClick={toggleDark} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-600 dark:text-slate-300">{isDark ? <Sun size={20} /> : <Moon size={20} />}</button></div>
+            <div className="flex justify-between items-center mb-4 max-w-5xl mx-auto">
+              <div className="flex items-center gap-2"><div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold">S</div><h1 className="text-xl font-bold tracking-tight">Sarange<span className="text-brand-600">Pro</span></h1></div>
+              <button onClick={toggleDark} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-600 dark:text-slate-300">{isDark ? <Sun size={20} /> : <Moon size={20} />}</button>
+            </div>
             <div className="max-w-5xl mx-auto relative"><Search className="absolute left-3 top-3 text-slate-400" size={20} /><input className="w-full pl-10 p-2.5 bg-slate-100 dark:bg-slate-800 border-0 rounded-xl outline-none focus:ring-2 focus:ring-brand-500 dark:text-white transition-all" placeholder="Rechercher un client..." value={search} onChange={e => setSearch(e.target.value)}/></div>
           </header>
           <main className="flex-1 p-4 max-w-5xl mx-auto w-full">
@@ -551,50 +587,155 @@
     };
 
     const NewChantierModal = ({ onClose }) => {
-      const { addChantier } = useApp(); const [f, setF] = useState({ client: '', adresse: '', typeContrat: 'FOURNITURE_SEULE', telephone: '', email: '' });
+      const { addChantier } = useApp();
+      const [f, setF] = useState({ client: '', adresse: '', typeContrat: 'FOURNITURE_SEULE', telephone: '', email: '' });
       const submit = () => { if (!f.client) return alert('Nom client requis'); addChantier({ ...f, date: new Date().toISOString() }); onClose(); };
       return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4 animate-fade-in"><div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 shadow-2xl"><h2 className="text-xl font-bold mb-6 dark:text-white">Nouveau Dossier</h2><Input label="Nom Client" value={f.client} onChange={v => setF({...f, client: v})} placeholder="Ex: M. Dupont" /><AddressInput value={f.adresse} onChange={v => setF({...f, adresse: v})} /><div className="grid grid-cols-2 gap-4"><Input label="Téléphone" value={f.telephone} onChange={v => setF({...f, telephone: v})} type="tel" inputMode="tel" pattern="[0-9]*" /><Input label="Email" value={f.email} onChange={v => setF({...f, email: v})} type="email" inputMode="email" /></div><SelectToggle label="Type de contrat" value={f.typeContrat} onChange={v => setF({...f, typeContrat: v})} options={[{label: 'Fourniture Seule', value: 'FOURNITURE_SEULE'}, {label: 'Fourniture & Pose', value: 'FOURNITURE_ET_POSE'}]} /><div className="flex gap-3 mt-6"><Button variant="secondary" onClick={onClose} className="flex-1">Annuler</Button><Button onClick={submit} className="flex-1">Créer</Button></div></div></div>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end md:items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 shadow-2xl">
+            <h2 className="text-xl font-bold mb-6 dark:text-white">Nouveau Dossier</h2>
+            <Input label="Nom Client" value={f.client} onChange={v => setF({...f, client: v})} placeholder="Ex: M. Dupont" />
+            <AddressInput value={f.adresse} onChange={v => setF({...f, adresse: v})} />
+            <div className="grid grid-cols-2 gap-4"><Input label="Téléphone" value={f.telephone} onChange={v => setF({...f, telephone: v})} type="tel" inputMode="tel" pattern="[0-9]*" /><Input label="Email" value={f.email} onChange={v => setF({...f, email: v})} type="email" inputMode="email" /></div>
+            <SelectToggle label="Type de contrat" value={f.typeContrat} onChange={v => setF({...f, typeContrat: v})} options={[{label: 'Fourniture Seule', value: 'FOURNITURE_SEULE'}, {label: 'Fourniture & Pose', value: 'FOURNITURE_ET_POSE'}]} />
+            <div className="flex gap-3 mt-6"><Button variant="secondary" onClick={onClose} className="flex-1">Annuler</Button><Button onClick={submit} className="flex-1">Créer le dossier</Button></div>
+          </div>
+        </div>
       );
     };
 
     const ChantierDetailView = () => {
       const { state, selectChantier, deleteProduct, saveProduct, updateChantier } = useApp();
-      const [editingProduct, setEditingProduct] = useState(null); const [showFinalize, setShowFinalize] = useState(false);
+      const [editingProduct, setEditingProduct] = useState(null);
+      const [showFinalize, setShowFinalize] = useState(false);
       const chantier = state.chantiers.find(c => c.id === state.currentChantierId);
       const products = state.products.filter(p => p.chantierId === chantier?.id).sort((a, b) => a.index - b.index);
+      
+      const addProduct = () => {
+        const last = products[products.length - 1];
+        const defaults = last ? {
+          matiere: last.matiere,
+          profil: last.profil,
+          couleur: last.couleur,
+          couleurAutre: last.couleurAutre,
+          isoMm: last.isoMm
+        } : {};
+        
+        setEditingProduct({ 
+          id: generateUUID(), 
+          chantierId: chantier.id, 
+          index: products.length + 1, 
+          type: 'FENETRE', 
+          quantity: 1, 
+          dateCreation: new Date().toISOString(), 
+          photos: [], 
+          isValid: false, 
+          validationErrors: [],
+          ...defaults 
+        });
+      }
+
       const duplicate = (e, p) => { e.stopPropagation(); saveProduct({ ...p, id: generateUUID(), index: products.length + 1, dateCreation: new Date().toISOString() }); };
       if (!chantier) return null;
       if (editingProduct) return <ProductEditor product={editingProduct} onSave={(p) => { saveProduct(p); setEditingProduct(null); }} onCancel={() => setEditingProduct(null)} />;
       const totalItems = products.reduce((acc, p) => acc + (p.quantity || 1), 0);
+
       return (
         <div className="flex flex-col h-screen bg-slate-50 dark:bg-slate-950">
-          <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex items-center justify-between sticky top-0 z-10 shadow-sm"><div className="flex items-center flex-1 min-w-0"><button onClick={() => selectChantier(null)} className="mr-3 p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-200"><ArrowLeft size={24} /></button><div className="truncate"><h2 className="font-bold text-lg dark:text-white truncate">{chantier.client}</h2><div className="text-xs text-slate-500 flex items-center gap-2"><span className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{totalItems} Produit(s)</span><span>• {chantier.typeContrat === 'FOURNITURE_ET_POSE' ? 'Pose' : 'Fourn. Seule'}</span></div></div></div><Button onClick={() => setShowFinalize(true)} className="ml-2 px-3 py-2 text-sm shadow-sm" icon={Check}>Finaliser</Button></div>
-          <div className="flex-1 overflow-y-auto p-4 max-w-5xl mx-auto w-full pb-24"><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{products.map(p => (<div key={p.id} onClick={() => setEditingProduct(p)} className={`bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border-l-[6px] cursor-pointer hover:shadow-md transition-all relative group ${p.type.includes('FENETRE') ? 'border-l-blue-500' : p.type.includes('PORTE') ? 'border-l-green-500' : 'border-l-orange-500'} border-t border-r border-b border-slate-200 dark:border-slate-800`}><div className="flex justify-between items-start mb-2"><span className="font-bold text-lg dark:text-white">#{String(p.index).padStart(2, '0')}</span>{p.quantity > 1 && <span className="bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-300 text-xs font-bold px-2 py-1 rounded-full">x{p.quantity}</span>}</div><div className="text-slate-800 dark:text-slate-200 font-medium mb-1">{p.type}</div><div className="text-sm text-slate-500 mb-3">{p.largeurMm} x {p.hauteurMm} mm {p.room && `• ${p.room}`}</div>{!p.isValid && (<div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 px-2 py-1 rounded text-xs inline-flex items-center mb-2"><AlertTriangle size={12} className="mr-1" /> Incomplet</div>)}<div className="flex justify-end gap-3 mt-2 pt-3 border-t border-slate-100 dark:border-slate-800"><button onClick={(e) => duplicate(e, p)} className="text-slate-400 hover:text-brand-600 p-1"><Copy size={18}/></button><button onClick={(e) => { e.stopPropagation(); if (confirm('Supprimer ?')) deleteProduct(p.id); }} className="text-slate-400 hover:text-red-600 p-1"><Trash2 size={18}/></button></div></div>))}<button onClick={() => setEditingProduct({ id: generateUUID(), chantierId: chantier.id, index: products.length + 1, type: 'FENETRE', quantity: 1, dateCreation: new Date().toISOString(), photos: [], isValid: false, validationErrors: [] })} className="min-h-[160px] border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 hover:border-brand-400 transition-colors"><div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-full mb-2"><Plus size={24}/></div><span className="font-medium">Ajouter un produit</span></button></div></div>
+          <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex items-center justify-between sticky top-0 z-10 shadow-sm">
+            <div className="flex items-center flex-1 min-w-0"><button onClick={() => selectChantier(null)} className="mr-3 p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-200"><ArrowLeft size={24} /></button><div className="truncate"><h2 className="font-bold text-lg dark:text-white truncate">{chantier.client}</h2><div className="text-xs text-slate-500 flex items-center gap-2"><span className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">{totalItems} Produit(s)</span><span>• {chantier.typeContrat === 'FOURNITURE_ET_POSE' ? 'Pose' : 'Fourn. Seule'}</span></div></div></div>
+            <Button onClick={() => setShowFinalize(true)} className="ml-2 px-3 py-2 text-sm shadow-sm" icon={Check}>Finaliser</Button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 max-w-5xl mx-auto w-full pb-24">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {products.map(p => (
+                <div key={p.id} onClick={() => setEditingProduct(p)} className={`bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border-l-[6px] cursor-pointer hover:shadow-md transition-all relative group ${p.type.includes('FENETRE') ? 'border-l-blue-500' : p.type.includes('PORTE') ? 'border-l-green-500' : 'border-l-orange-500'} border-t border-r border-b border-slate-200 dark:border-slate-800`}>
+                  <div className="flex justify-between items-start mb-2"><span className="font-bold text-lg dark:text-white">#{String(p.index).padStart(2, '0')}</span>{p.quantity > 1 && <span className="bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-300 text-xs font-bold px-2 py-1 rounded-full">x{p.quantity}</span>}</div>
+                  <div className="text-slate-800 dark:text-slate-200 font-medium mb-1">{p.type}</div>
+                  <div className="text-sm text-slate-500 mb-3">{p.largeurMm} x {p.hauteurMm} mm {p.room && `• ${p.room}`}</div>
+                  {!p.isValid && (<div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 px-2 py-1 rounded text-xs inline-flex items-center mb-2"><AlertTriangle size={12} className="mr-1" /> Incomplet</div>)}
+                  <div className="flex justify-end gap-3 mt-2 pt-3 border-t border-slate-100 dark:border-slate-800"><button onClick={(e) => duplicate(e, p)} className="text-slate-400 hover:text-brand-600 p-1"><Copy size={18}/></button><button onClick={(e) => { e.stopPropagation(); if (confirm('Supprimer ?')) deleteProduct(p.id); }} className="text-slate-400 hover:text-red-600 p-1"><Trash2 size={18}/></button></div>
+                </div>
+              ))}
+              <button onClick={addProduct} className="min-h-[160px] border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 hover:border-brand-400 transition-colors"><div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-full mb-2"><Plus size={24}/></div><span className="font-medium">Ajouter un produit</span></button>
+            </div>
+          </div>
           {showFinalize && <FinalizeModal chantier={chantier} products={products} onClose={() => setShowFinalize(false)} onUpdate={(d) => updateChantier(chantier.id, d)} />}
         </div>
       );
     };
 
     const ProductEditor = ({ product: initial, onSave, onCancel }) => {
-      const [p, setP] = useState(initial); const [errors, setErrors] = useState([]); const [adv, setAdv] = useState(false); const fileInputRef = useRef(null); const { state } = useApp();
+      const [p, setP] = useState(initial);
+      const [errors, setErrors] = useState([]);
+      const [adv, setAdv] = useState(false);
+      const [showG200Toast, setShowG200Toast] = useState(false);
+      const fileInputRef = useRef(null);
+      const { state } = useApp();
+      
       const update = (k, v) => setP(pr => ({ ...pr, [k]: v }));
       const updateNested = (parent, k, v) => setP(pr => ({ ...pr, [parent]: { ...(pr[parent] || {}), [k]: v } }));
-      const handleSave = () => { const check = ValidationService.validateProduct(p); if (!check.isValid) { setErrors(check.errors); setTimeout(() => { const el = document.getElementById(`field-${check.errors[0]}`); if(el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100); return; } onSave({ ...p, isValid: true, validationErrors: [] }); };
-      const handlePhoto = async (e) => { if (e.target.files && e.target.files[0]) { const compressed = await compressImage(e.target.files[0]); update('photos', [...(p.photos || []), compressed]); } };
+
+      // SDB Detection Logic
+      const handleRoomChange = (val) => {
+        update('room', val);
+        const lower = val.toLowerCase();
+        if (/sdb|salle\s?de\s?bain|toilette|wc|douche/i.test(lower)) {
+           if (['FENETRE', 'BAIE_COULISSANTE'].includes(p.type)) {
+             if (!p.vitrageFlags?.g200) {
+                setP(prev => ({
+                  ...prev,
+                  vitrageFlags: { ...prev.vitrageFlags, standard: true, g200: true }
+                }));
+                setShowG200Toast(true);
+                setTimeout(() => setShowG200Toast(false), 3000);
+             }
+           }
+        }
+      };
+
+      // Auto-correct logic
+      useEffect(() => {
+         if (p.type === 'FENETRE' && p.hauteurMm > 2200) setP(x => ({...x, oscilloBattant: false})); 
+      }, [p.hauteurMm]);
+
+      const handleSave = () => {
+        const check = ValidationService.validateProduct(p);
+        if (!check.isValid) {
+          setErrors(check.errors);
+          setTimeout(() => { const el = document.getElementById(`field-${check.errors[0]}`); if(el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100);
+          return;
+        }
+        onSave({ ...p, isValid: true, validationErrors: [] });
+      };
+
+      const handlePhoto = async (e) => {
+        if (e.target.files && e.target.files[0]) {
+           const compressed = await compressImage(e.target.files[0]);
+           update('photos', [...(p.photos || []), compressed]);
+        }
+      };
+
       const isErr = (field) => errors.includes(field);
 
       return (
         <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950 z-50 flex flex-col h-full animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex justify-between items-center shadow-sm shrink-0"><button onClick={onCancel} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"><X size={24} className="text-slate-500"/></button><h2 className="font-bold dark:text-white">Produit #{String(p.index).padStart(2,'0')}</h2><Button onClick={handleSave} className="px-5 py-2 rounded-full" icon={Save}>Sauver</Button></div>
+          <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex justify-between items-center shadow-sm shrink-0">
+             <button onClick={onCancel} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"><X size={24} className="text-slate-500"/></button>
+             <h2 className="font-bold dark:text-white">Produit #{String(p.index).padStart(2,'0')}</h2>
+             <Button onClick={handleSave} className="px-5 py-2 rounded-full" icon={Save}>Sauver</Button>
+          </div>
           <div className="flex-1 overflow-y-auto p-4 pb-20 max-w-3xl mx-auto w-full">
             {errors.length > 0 && (<div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-300 p-3 rounded-lg flex items-center"><AlertCircle size={20} className="mr-2"/><span>Des champs obligatoires sont manquants.</span></div>)}
             <div className="space-y-4">
               <div className="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-slate-200 dark:border-slate-800">
                 <SelectToggle label="Type de produit" value={p.type} onChange={v => update('type', v)} options={[{label:'Fenêtre', value:'FENETRE'}, {label:'Baie', value:'BAIE_COULISSANTE'}, {label:'Porte Entrée', value:'PORTE_ENTREE'}, {label:'Porte Service', value:'PORTE_SERVICE'}, {label:'Volet', value:'VOLET_ROULANT'}, {label:'Autre', value:'AUTRE'}]} />
                 <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800 p-3 rounded-lg mb-4 border border-slate-100 dark:border-slate-700"><span className="font-medium text-slate-700 dark:text-slate-300">Quantité</span><div className="flex items-center gap-4"><button className="w-8 h-8 rounded-full bg-white dark:bg-slate-700 shadow text-brand-600 font-bold" onClick={() => update('quantity', Math.max(1, (p.quantity || 1) - 1))}>-</button><span className="font-bold text-xl w-6 text-center dark:text-white">{p.quantity || 1}</span><button className="w-8 h-8 rounded-full bg-white dark:bg-slate-700 shadow text-brand-600 font-bold" onClick={() => update('quantity', (p.quantity || 1) + 1)}>+</button></div></div>
-                <Input label="Localisation (Pièce)" value={p.room} onChange={v => update('room', v)} placeholder="Ex: Cuisine, Salon..." />
+                <Input label="Localisation (Pièce)" value={p.room} onChange={handleRoomChange} placeholder="Ex: Cuisine, Salon..." />
+                
+                {/* Description pour AUTRE */}
                 {p.type==='AUTRE' && <Input id="field-description" label="Description" value={p.description} onChange={v => update('description', v)} error={isErr('description')}/>}
+
                 <div className="grid grid-cols-2 gap-4"><Input id="field-largeurMm" label="Largeur (mm)" type="number" inputMode="numeric" pattern="[0-9]*" value={p.largeurMm} onChange={v => update('largeurMm', parseInt(v))} error={isErr('largeurMm')} /><Input id="field-hauteurMm" label="Hauteur (mm)" type="number" inputMode="numeric" pattern="[0-9]*" value={p.hauteurMm} onChange={v => update('hauteurMm', parseInt(v))} error={isErr('hauteurMm')} /></div>
                 {ValidationService.isMeasureSuspicious(p.largeurMm, p.monobloc) || ValidationService.isMeasureSuspicious(p.hauteurMm, p.monobloc) ? (<div className="text-orange-500 text-xs flex items-center mt-[-10px] mb-4"><AlertTriangle size={12} className="mr-1"/> Attention: Cotes très petites (&lt;150mm)</div>) : null}
               </div>
@@ -684,14 +825,17 @@
                 </div>
               )}
 
-              <DrawingCanvas data={p.dessin} onChange={d => update('dessin', d)} />
-              
               <div className="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-slate-200 dark:border-slate-800">
-                <div className="mb-4"><label className="block text-sm font-medium mb-3 text-slate-700 dark:text-slate-300">Photos</label><div className="grid grid-cols-4 gap-2">{(p.photos || []).map((src, i) => (<div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 group"><img src={src} className="w-full h-full object-cover" /><button onClick={() => update('photos', p.photos.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 shadow-md opacity-80 hover:opacity-100"><X size={12}/></button></div>))}<button onClick={() => fileInputRef.current?.click()} className="aspect-square rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex flex-col items-center justify-center text-slate-400 hover:text-brand-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"><Camera size={24} /><span className="text-[10px] mt-1">Ajouter</span></button><input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handlePhoto} /></div></div>
-                <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Notes techniques</label><textarea className="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 dark:text-white h-24 text-sm focus:border-brand-500 outline-none" placeholder="Contraintes de pose, accès..." value={p.notes || ''} onChange={e => update('notes', e.target.value)}/></div>
+                <DrawingCanvas data={p.dessin} onChange={d => update('dessin', d)} />
+                <div className="mt-6"><label className="block text-sm font-medium mb-3 text-slate-700 dark:text-slate-300">Photos</label><div className="grid grid-cols-4 gap-2">{(p.photos || []).map((src, i) => (<div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 group"><img src={src} className="w-full h-full object-cover" /><button onClick={() => update('photos', p.photos.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 shadow-md opacity-80 hover:opacity-100"><X size={12}/></button></div>))}<button onClick={() => fileInputRef.current?.click()} className="aspect-square rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex flex-col items-center justify-center text-slate-400 hover:text-brand-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"><Camera size={24} /><span className="text-[10px] mt-1">Ajouter</span></button><input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handlePhoto} /></div></div>
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Notes techniques</label>
+                  <textarea className="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 dark:text-white h-24 text-sm focus:border-brand-500 outline-none" placeholder="Contraintes de pose, accès..." value={p.notes || ''} onChange={e => update('notes', e.target.value)}/>
+                </div>
               </div>
             </div>
           </div>
+          {showG200Toast && <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-3 rounded-lg shadow-xl flex items-center animate-slide-up"><Droplets size={20} className="text-blue-400 mr-2"/> Vitrage G200 activé (Intimité)</div>}
         </div>
       );
     };
